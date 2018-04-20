@@ -56,7 +56,8 @@ Given the instantaneous nature of the data, this project is most naturally imple
 1. Store raw sensory data obtained from EPA (Amazon S3, HDFS)
 2. Pass sensory data from multiple sources to the data processing engine (Kafka, Kinesis)
 3. Clean up the data; compute the pollution map and averages over long periods of time (Storm, Spark, Spark Streaming, Flink)
-4. Display results in a Web application (Flask, Django) as a series of updated map snapshots
+4. Store the computed map into a database as a time series (Cassandra, PostgreSQL)
+5. Load data from the database and display heat map in a Web application (Flask, Django) as a series of updated map snapshots
 
  Of all the technologies suitable for processing streaming data, I believe Spark would be most suitable for my project since the heavy part of the processing (computing the heat map) would be done only once the data from all sensors across the country has been loaded (once every 1 second or so).
 
