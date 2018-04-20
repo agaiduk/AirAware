@@ -11,11 +11,11 @@ This is my project for Insight Data Engineering program. The goal of this projec
     * [Data cleanup](README.md#data-cleanup)
     * [Combining different data sources](README.md#combining-different-data-sources)
     * [Computation](README.md#computation)
-4. [Proposed pipeline](README.md#requirements-and-dependencies)
+4. [Possible technologies and pipeline](README.md#possible-technologies-and-pipeline)
 
 ## Summary
 
-Environmental Protection Agency (EPA) routinely measures concentrations of various pollutants in the atmosphere, including, for example, carbon monoxide (CO), sulfur oxides (SO<sub>*x*</sub>), and of solid particles in the air. These data are accumulated at air control stations that aren't usually located in residential areas. This project will use the EPA datasets to estimate the content of pollutants in the atmosphere at arbitrary locations in real time.
+Environmental Protection Agency (EPA) routinely measures concentrations of various pollutants in the atmosphere, including, for example, carbon monoxide (CO), sulfur oxides (SO<sub>*x*</sub>), and of solid particles in the air (PM). These data are accumulated at air control stations that aren't usually located in residential areas. This project will use the EPA datasets to estimate the content of pollutants in the atmosphere at arbitrary locations in real time.
 
 ## Practical significance
 
@@ -47,13 +47,17 @@ The data sets for various pollutants and weather conditions could be coming from
 
 ### Computation
 
-Computation of interpolated geospatial data is an expensive procedure, as [previous Insight project](https://github.com/CCInCharge/campsite-hot-or-not) has shown. My project will require performing extrapolations for even larger number of locations, and for several types of pollutants at the same time. Combining pollution data with weather conditions data will add another interesting dimension to the problem and increase its complexity.
+Interpolation geospatial data is an expensive procedure, as [previous Insight project](https://github.com/CCInCharge/campsite-hot-or-not) has shown. My project will require performing extrapolations for even larger number of locations, and for several types of pollutants at the same time. Combining pollution data with weather conditions data will add another interesting dimension to the problem and increase its complexity.
 
-## Proposed pipeline
+## Possible technologies and pipeline
 
-1. Ingest environmental dataset
-2. Clean up the data
-3. Precompute the grid for the heatmap
-4. Using streaming data (~8k events/s), compute distribution of various pollutants on the grid; also compute averages over longer periods of time
+Given the instantaneous nature of the data, this project is most naturally implemented using a streaming pipeline. I could envision the following elements of the pipeline:
+
+1. Store raw sensory data obtained from EPA (Amazon S3, HDFS)
+2. Pass sensory data from multiple sources to the data processing engine (Kafka, Kinesis)
+3. Clean up the data; compute the pollution map and averages over long periods of time (Storm, Spark, Spark Streaming, Flink)
+4. Display results in a Web application (Flask, Django) as a series of updated map snapshots
+
+ Of all the technologies suitable for processing streaming data, I believe Spark would be most suitable for my project since the heavy part of the processing (computing the heat map) would be done only once the data from all sensors across the country has been loaded (once every 1 second or so).
 
 ![Project's pipeline](./pipeline.png)
