@@ -25,15 +25,9 @@ The result of the project will be a Web application showing real-time heat map o
 
 The complete measurement data is available free of charge on [EPA website](https://aqs.epa.gov/aqsweb/airdata/download_files.html#Raw) for the years 1980-2017, measured every hour at all locations across US. The amount of data is ~10 Gb/year for years after 2000.
 
-## Methods
+## Method
 
-Spacial inter(extra)polation is a common problem. Here are some of the [methods](http://www.integrated-assessment.eu/eu/guidebook/spatial_interpolation_and_extrapolation_methods.html) for addressing it:
-* Nearest neighbor method (Voronoi polygons)
-* Inverse distance weighting
-* Splines
-* Geostatistical methods (*kriging*)
-
-In addition, there are more complicated methods (e.g., http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0096111) that use information about the temperature and wind data to improve the accuracy of predictions.
+Spacial inter(extra)polation is a common problem. Here are some of the [methods](http://www.integrated-assessment.eu/eu/guidebook/spatial_interpolation_and_extrapolation_methods.html) for addressing it, but to go as simple as possible, I will use inverse distance weighting to determine the pollution level in an arbitrary point.
 
 ## Challenges
 
@@ -49,16 +43,18 @@ The data sets for various pollutants and weather conditions could be coming from
 
 Interpolation geospatial data is an expensive procedure, as [previous Insight project](https://github.com/CCInCharge/campsite-hot-or-not) has shown. My project will require performing extrapolations for even larger number of locations, and for several types of pollutants at the same time. Combining pollution data with weather conditions data will add another interesting dimension to the problem and increase its complexity.
 
-## Possible technologies and pipeline
+### Storage of air pollution levels
 
-Given the instantaneous nature of the data, this project is most naturally implemented using a streaming pipeline. I could envision the following elements of the pipeline:
+Once the computation for a given moment of time is complete, the resulting map overlay needs to be stored in the database for all the points on the map, as a time series. This means storing ~10,000 points for each moment of time, potentially for every day in a year. The Web application will also need to have a way to access these data from the database quickly and efficiently, to display them on the map (or plot in response to a query).
 
-1. Store raw sensory data obtained from EPA (Amazon S3, HDFS)
-2. Pass sensory data from multiple sources to the data processing engine (Kafka, Kinesis)
-3. Clean up the data; compute the pollution map and averages over long periods of time (Storm, Spark, Spark Streaming, Flink)
+## Data ingestion/processing pipeline
+
+This project is currently implemented using the streaming pipeline:
+
+1. Store raw sensory data obtained from EPA (Amazon S3)
+2. Pass sensory data from multiple sources to the data processing engine (Kafka)
+3. Clean up the data; compute the pollution map and averages over long periods of time (Spark Streaming)
 4. Store the computed map into a database as a time series (Cassandra, PostgreSQL)
-5. Load data from the database and display heat map in a Web application (Flask, Django) as a series of updated map snapshots
-
- Of all the technologies suitable for processing streaming data, I believe Spark would be most suitable for my project since the heavy part of the processing (computing the heat map) would be done only once the data from all sensors across the country has been loaded (once every 1 second or so).
+5. Load data from the database and display heat map in a Web application (Flask) as a series of updated map snapshots
 
 ![Project's pipeline](./pipeline.png)
