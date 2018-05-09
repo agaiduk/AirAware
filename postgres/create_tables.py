@@ -10,8 +10,8 @@ def create_tables():
     '''
     commands = (
         """
-        DROP TABLE IF EXISTS grid;
-        DROP TABLE IF EXISTS measurements;
+        DROP TABLE IF EXISTS grid CASCADE;
+        DROP TABLE IF EXISTS measurements_monthly;
         """,
         """
         CREATE TABLE IF NOT EXISTS grid (
@@ -21,11 +21,12 @@ def create_tables():
             location geography(POINT) NOT NULL)
         """,
         """
-        CREATE TABLE IF NOT EXISTS measurements (
+        CREATE TABLE IF NOT EXISTS measurements_monthly (
                 grid_id INT NOT NULL REFERENCES grid (grid_id) ON DELETE CASCADE,
                 time TIMESTAMP NOT NULL,
+                parameter INT NOT NULL,
                 C REAL,
-                PRIMARY KEY(grid_id, time))
+                PRIMARY KEY(grid_id, time, parameter))
         """
     )
 
