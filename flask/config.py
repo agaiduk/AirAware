@@ -11,7 +11,8 @@ postgres_url = 'postgresql://'\
                + '@localhost:' + config["postgres"]["port"] + '/' + config["postgres"]["db"]
 
 secret_key = config["flask"]["secret_key"]
-GoogleMapsAPIKey = config["flask"]["GoogleMapsAPIKey"]
+GoogleMapsKey = config["flask"]["GoogleMapsKey"]
+GoogleMapsJSKey = config["flask"]["GoogleMapsJSKey"]
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -23,7 +24,8 @@ class Config(object):
     SECRET_KEY = secret_key
     SQLALCHEMY_DATABASE_URI = postgres_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    GOOGLEMAPSAPIKEY = GoogleMapsAPIKey
+    GOOGLEMAPSKEY = GoogleMapsKey
+    GOOGLEMAPSJSKEY = GoogleMapsJSKey
 
 
 class ProductionConfig(Config):

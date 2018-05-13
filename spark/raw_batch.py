@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import sys
 import csv
 import json
 from datetime import datetime
@@ -7,9 +8,31 @@ from StringIO import StringIO
 import configparser
 
 from pyspark import SparkContext, SparkConf
-from pyspark.sql import SparkSession, SQLContext, DataFrameReader, Row
-from pyspark.sql.types import (StructType, StructField, FloatType, DateType,
-                               TimestampType, IntegerType, StringType)
+from pyspark.storagelevel import StorageLevel
+from pyspark.sql import SparkSession, SQLContext
+from pyspark.sql.types import (StructType, StructField, FloatType,
+                               TimestampType, IntegerType)
+
+from boto.s3.connection import S3Connection
+
+
+def file_year(fname):
+    '''
+    Given string of the format word_word_year.extension, return integer year
+    This works for files supplied by EPA but strictly, should be generalized
+    '''
+    try:
+        basename = fname.split('.')[0]
+        parameter = basename.split('_')[1]
+        year_string = basename.split('_')[2]
+    except (ValueError, IndexError):
+        return None
+    if parameter not in ['44201', '88101', '88502']:
+        return None
+    year = convert_to_int(year_string)
+    if not year:
+        return None
+    return year
 
 
 def get_grid_from_file(filename):
@@ -49,9 +72,9 @@ def convert_to_int(string):
     '''
     try:
         number = int(string)
-        return number
     except ValueError:
         return None
+    return number
 
 
 def convert_to_float(string):
@@ -77,6 +100,29 @@ def convert_to_float(string):
         return None
 
 
+def get_file_list(bucket_name):
+    '''
+    Given the S3 bucket, return a list of files sorted in
+    reverse chronological order
+    '''
+    file_list = []
+
+    conn = S3Connection()
+    bucket = conn.get_bucket(bucket_name)
+    for bucket_object in bucket.get_all_keys():
+        fname = bucket_object.key
+        if not fname.startswith('hourly'):
+            continue
+        year = file_year(fname)
+        if not year:
+            continue
+        file_list.append((fname, year))
+
+    file_list.sort(key=lambda x: x[1], reverse=True)
+
+    return [f[0] for f in file_list]
+
+
 def parse_measurement_record(measurement_record):
     '''
     This function ...
@@ -96,7 +142,7 @@ def parse_measurement_record(measurement_record):
     record = reader.next()
 
     parameter = convert_to_int(record[3])
-    if parameter not in [44201, 88101]:
+    if parameter not in [44201, 88101, 88502]:
         # Ignore records other than ozone (44201) or PM2.5 (88101)
         return None
 
@@ -109,6 +155,11 @@ def parse_measurement_record(measurement_record):
     site_number = record[2]
     site_id = '|'.join([state_id, county_id, site_number])
 
+    # Check if this is in the station lookup table to avoid issues downstream
+    grid = STATIONS.get(site_id, None)
+    if not grid:
+        return None
+
     # Carve out the GMT timestamp
     date = record[11]
     time = record[12]
@@ -117,6 +168,10 @@ def parse_measurement_record(measurement_record):
     C = convert_to_float(record[13])
     mdl = convert_to_float(record[15])
     if not C or not mdl:
+        return None
+
+    # Filter out malformed records with negative concentration
+    if C < 0.:
         return None
 
     # Measured concentration is below detection limit
@@ -145,6 +200,7 @@ def station_to_grid(rdd):
     parameter = rdd[1]
     C = rdd[2]
     timestamp = rdd[3]
+    # Since we made sure upstream that site_id is in dictionary, can extract it
     grid = STATIONS[site_id]
     measurements = []
     for grid_id in grid:
@@ -222,14 +278,15 @@ def average_over_month(rdd):
     return (grid_id, timestamp, parameter, C)
 
 
-def main():
+def main(argv):
 
     # Read in data from the configuration file
 
     config = configparser.ConfigParser()
     config.read('../setup.cfg')
 
-    s3 = 's3a://' + config["s3"]["bucket"] + '/'
+    bucket_name = config["s3"]["bucket"]
+    s3 = 's3a://' + bucket_name + '/'
     spark_url = 'spark://' + config["spark"]["dns"]
     postgres_url = 'jdbc:postgresql://' + config["postgres"]["dns"] + '/'\
                    + config["postgres"]["db"]
@@ -243,13 +300,26 @@ def main():
     cassandra_username = config["cassandra"]["user"]
     cassandra_password = config["cassandra"]["password"]
 
+    # Global variable STATIONS to store distances from stations to grid points
+
+    global STATIONS
+    STATIONS = get_grid_from_file("stations.json")
+
+    # Start processing data files
+
+    if len(argv) < 1:
+        raise AssertionError("Usage: raw_batch.sh <data_file>")
+
+    data_fname = argv[1]
+    print('Processing file {}\n'.format(data_fname))
+
     # Create Spark context & session
 
     conf = SparkConf().set("spark.cassandra.connection.host", cassandra_url)\
                       .set("spark.cassandra.auth.username", cassandra_username)\
                       .set("spark.cassandra.auth.password", cassandra_password)
 
-    sc = SparkContext(spark_url, "Batch", conf=conf)
+    sc = SparkContext(spark_url, data_fname, conf=conf)
     spark = SparkSession(sc)
     sqlContext = SQLContext(sc)
 
@@ -269,39 +339,17 @@ def main():
         StructField("c", FloatType(), False)
     ])
 
-    # Read the most recent data from Postgres to get the most recent timestamp
-    # df = sqlContext.read.jdbc(url=postgres_url, table='coordinates', properties=postgres_properties)
-
-    # Start processing data files
-
-    # data_file = 'hourly_NONOxNOy_2010.csv'
-    # data_file = 'sample'
-    data_file = 'day'
-    raw = s3 + data_file
-
+    raw = s3 + data_fname
     data_rdd = sc.textFile(raw)
 
-    # Global variable STATIONS to store distances from stations to grid points
-    global STATIONS
-    STATIONS = get_grid_from_file("stations.json")
-
-    # grid_df = sc.parallelize(GRID).toDF()
-    # grid_df.write.jdbc(url=postgres_url, table='coordinates', mode='append', properties=postgres_properties)
-
-    # Read query - not planning to have those currently
-    # df = sqlContext.read.jdbc(url=postgres_url, table='coordinates', properties=postgres_properties)
-
-    # df = sc.parallelize([Row(grid_id=1, time=datetime.now(), c=11)]).toDF()
-    # df.write.jdbc(url=postgres_url, table='hourly', mode='append', properties=postgres_properties)
-
-    # Compute pollution levels on the grid
+    # Compute hourly pollution levels on the grid
     data_hourly = data_rdd\
         .map(parse_measurement_record)\
         .filter(lambda line: line is not None)\
         .flatMap(station_to_grid)\
         .reduceByKey(sum_weight_and_prods)\
         .map(calc_weighted_average_grid)\
-        .persist()
+        .persist(StorageLevel.MEMORY_AND_DISK)
 
     # Write them to Cassandra database
     data_hourly_df = spark\
@@ -318,19 +366,15 @@ def main():
         .map(group_by_month)\
         .reduceByKey(sum_weight_and_prods)\
         .map(average_over_month)\
-        .persist()
+        .persist(StorageLevel.MEMORY_AND_DISK)
 
     # Write monthly data to Postgres database
-
     data_monthly_df = spark.createDataFrame(data_monthly, schema_monthly)
     data_monthly_df.write.jdbc(
         url=postgres_url, table=table_monthly,
-        mode='overwrite', properties=postgres_credentials
+        mode='append', properties=postgres_credentials
     )
-
-    # print(data_monthly.collect())
-    # data_monthly_df.show()
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)

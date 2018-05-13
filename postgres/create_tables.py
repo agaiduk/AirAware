@@ -18,15 +18,19 @@ def create_tables():
             grid_id INT PRIMARY KEY,
             longitude float4 NOT NULL,
             latitude float4 NOT NULL,
-            location geography(POINT) NOT NULL)
+            location geography(POINT) NOT NULL);
         """,
         """
         CREATE TABLE IF NOT EXISTS measurements_monthly (
-                grid_id INT NOT NULL REFERENCES grid (grid_id) ON DELETE CASCADE,
-                time TIMESTAMP NOT NULL,
-                parameter INT NOT NULL,
-                C REAL,
-                PRIMARY KEY(grid_id, time, parameter))
+            grid_id INT NOT NULL REFERENCES grid (grid_id) ON DELETE CASCADE,
+            time TIMESTAMP NOT NULL,
+            parameter INT NOT NULL,
+            C REAL,
+            PRIMARY KEY (grid_id, time, parameter) );
+        CREATE RULE "measurements_monthly_on_duplicate_ignore" AS ON INSERT TO "measurements_monthly"
+            WHERE EXISTS(SELECT 1 FROM measurements_monthly
+                WHERE (grid_id, time, parameter)=(NEW.grid_id, NEW.time, NEW.parameter))
+            DO INSTEAD NOTHING;
         """
     )
 
