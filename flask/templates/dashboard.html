@@ -24,15 +24,54 @@
   <!-- Dashboard -->
   <link rel="stylesheet" type="text/css" href="../static/css/keen-dashboards.css" />
   <style>
-     #map {
-      height: 400px;
-      width: 100%;
-     }
+    #map {
+     height: 400px;
+     width: 100%;
+    }
+    /* Styling dfn tag to highlight the word with the tooltip */
+    dfn {
+      cursor: help;
+      font-style: normal;
+      position: relative;
+    }
+    dfn::after {
+      content: attr(data-info);
+      display: inline;
+      position: absolute;
+      top: 22px; left: 0;
+      opacity: 0;
+      width: 300px;
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.5em;
+      padding: 0.5em 0.8em;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      pointer-events: none; /* This prevents the box from apearing when hovered. */
+      transition: opacity 250ms, top 250ms;
+    }
+    dfn::before {
+      content: '';
+      display: block;
+      position: absolute;
+      top: 12px; left: 20px;
+      opacity: 0;
+      width: 0; height: 0;
+      border: solid transparent 5px;
+      border-bottom-color: rgba(0,0,0,0.8);
+      transition: opacity 250ms, top 250ms;
+    }
+    dfn:hover {z-index: 2;} /* Keeps the info boxes on top of other elements */
+    dfn:hover::after,
+    dfn:hover::before {opacity: 1;}
+    dfn:hover::after {top: 30px;}
+    dfn:hover::before {top: 20px;}
   </style>
   <!-- Bootstrap core CSS -->
   <link href="../static/css/bootstrap.min.css" rel="stylesheet">
   <!-- Custom styles for this template -->
   <link href="../static/css/starter-template.css" rel="stylesheet">
+
 </head>
 <body class="keen-dashboard" style="padding-top: 80px;">
 
@@ -48,14 +87,28 @@
         <a class="navbar-brand" href="../">
           <span class="glyphicon glyphicon-chevron-left"></span>
         </a>
-        <a class="navbar-brand" href="./">AirAware</a>
+        <a class="navbar-brand" href="https://github.com/agaiduk/AirAware">AirAware</a>
       </div>
       <div class="navbar-collapse collapse">
         <ul class="nav navbar-nav navbar-left">
-          <li><a href="https://keen.io">Home</a></li>
-          <li><a href="https://keen.io/team">Team</a></li>
-          <li><a href="https://github.com/keenlabs/dashboards/tree/gh-pages/layouts/two-and-one">Source</a></li>
-          <li><a href="https://groups.google.com/forum/#!forum/keen-io-devs">Community</a></li><li><a href="http://stackoverflow.com/questions/tagged/keen-io?sort=newest&pageSize=15">Technical Support</a></li>
+          <li><a href="https://docs.google.com/presentation/d/1BWLKoafapgM5VxpgU_nHYCeJLk38wu1VACwECdN8RIo">Slides</a></li>
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Air Pollution<span class="caret"></span></a>
+            <ul class="dropdown-menu">
+              <li><a href="http://www.aafa.org/page/air-pollution-smog-asthma.aspx">Air pollution and asthma</a></li>
+              <li><a href="https://www.epa.gov/criteria-air-pollutants">EPA website</a></li>
+            </ul>
+          </li>
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Alex Gaiduk<span class="caret"></span></a>
+            <ul class="dropdown-menu">
+              <li><a href="../static/pdf/Resume_Gaiduk.pdf">Resume</a></li>
+              <li><a href="https://www.linkedin.com/in/agaiduk">LinkedIn</a></li>
+              <li><a href="https://github.com/agaiduk">Github</a></li>
+              <li><a href="https://scholar.google.com/citations?user=hkZPyt4AAAAJ&hl=en">Publications</a></li>
+            </ul>
+          </li>
+          <li><a href="mailto:a.gaiduk@gmail.com">Email</a></li>
         </ul>
       </div>
     </div>
@@ -68,7 +121,7 @@
       <div class="col-sm-8 col-sm-offset-2">
         <form role="form" action="/" method="post">
                 <div class="input-group">
-                  <input type="text" class="form-control input-sm" name="address" value="260 Sheridan Dr Palo Alto CA" placeholder="Enter address...">
+                  <input type="text" class="form-control input-sm" name="address" placeholder="Enter address...">
                   <span class="input-group-btn">
                     <button class="btn btn-default btn-sm" type="submit" value="Submit"><span class="glyphicon glyphicon-search"></span></button>
                   </span>
@@ -84,13 +137,13 @@
           <div id="map"></div>
           <script>
             function initMap() {
-              var uluru = {lat: {{ lat|safe }}, lng: {{ lon|safe }}};
+              var coords = {lat: {{ lat|safe }}, lng: {{ lon|safe }}};
               var map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 15,
-                center: uluru
+                center: coords
               });
               var marker = new google.maps.Marker({
-                position: uluru,
+                position: coords,
                 map: map
               });
 
@@ -109,9 +162,9 @@
               });
 
               var marker = new google.maps.Marker({
-                position: uluru,
+                position: coords,
                 map: map,
-                title: 'Uluru (Ayers Rock)'
+                title: 'Pollution meter'
               });
               marker.addListener('click', function() {
                 infowindow.open(map, marker);
@@ -131,7 +184,7 @@
       <div class="col-sm-6">
         <div class="chart-wrapper">
           <div class="chart-title">
-            Ozone air pollution
+            <dfn data-info="Highly irritating gas known of causing asthma attacks">Ozone</dfn> air pollution
           </div>
           <div class="chart" id="ozone"></div>
           <div class="chart-notes">
@@ -143,7 +196,7 @@
       <div class="col-sm-6">
         <div class="chart-wrapper">
           <div class="chart-title">
-            PM2.5 particles air pollution
+            <dfn data-info="Hard particles with size of less than 2.5 &mu;m; one of the most harmful components of smog">PM2.5 particles</dfn> air pollution
           </div>
           <div class="chart" id="pm"></div>
           <div class="chart-notes">
@@ -172,7 +225,7 @@
       var series_ozone = {{ series_ozone|safe }}
       var series_pm = {{ series_pm|safe }}
       var title = {"text": ''}
-      var xAxis = {'type': 'datetime', "title": {'text': 'Date'}}
+      var xAxis = {'type': 'datetime', "title": {'text': 'Date'}, 'min': Date.UTC(2010, 0, 0)}
       var yAxis = {"title": {"text": 'Concentration'}}
 
       $(document).ready(function() {
@@ -199,6 +252,7 @@
   ================================================== -->
   <!-- Placed at the end of the document so the pages load faster -->
   <script>window.jQuery || document.write('<script src="../static/docs/assets/js/vendor/jquery.min.js"><\/script>')</script>
+  <script src="../static/js/bootstrap.min.js"></script>
   <script src="../static/js/bootstrap.min.js"></script>
 </body>
 </html>
