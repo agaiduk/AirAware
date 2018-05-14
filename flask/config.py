@@ -13,6 +13,7 @@ postgres_url = 'postgresql://'\
 secret_key = config["flask"]["secret_key"]
 GoogleMapsKey = config["flask"]["GoogleMapsKey"]
 GoogleMapsJSKey = config["flask"]["GoogleMapsJSKey"]
+CassandraNode = config["cassandra"]["dns"]
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -26,6 +27,7 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     GOOGLEMAPSKEY = GoogleMapsKey
     GOOGLEMAPSJSKEY = GoogleMapsJSKey
+    CASSANDRA_NODES = CassandraNode
 
 
 class ProductionConfig(Config):

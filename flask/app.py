@@ -1,14 +1,21 @@
 import googlemaps
 from flask import Flask
-from flask import render_template, request, flash, redirect, url_for
+from flask import render_template, request, flash, redirect, url_for, send_file
+from flask import stream_with_context, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_bootstrap import Bootstrap
 from sqlalchemy.sql import text
+from flask_cassandra import CassandraCluster
 import os
 import models
 from forms import AddressForm
 import pprint
 from datetime import datetime
+import json
+import csv
+from collections import OrderedDict
+#from tempfile import NamedTemporaryFile
+from io import StringIO
 
 
 app = Flask(__name__)
@@ -19,6 +26,58 @@ GoogleMapsKey = app.config["GOOGLEMAPSKEY"]
 GoogleMapsJSKey = app.config["GOOGLEMAPSJSKEY"]
 gmaps = googlemaps.Client(key=GoogleMapsKey)
 API_url = "https://maps.googleapis.com/maps/api/js?key=" + GoogleMapsJSKey + "&callback=initMap"
+cassandra = CassandraCluster()
+
+
+@app.route('/download', methods=['GET', 'POST'])
+def download():
+
+    def make_csv(grid_id):
+        session = cassandra.connect()
+        session.set_keyspace("air")
+        cql_ozone = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, '44201')
+        cql_pm = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, '88101')
+        cql_pm_nof = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, '88502')
+        records_ozone = list(session.execute(cql_ozone))
+        records_pm = list(session.execute(cql_pm))
+        records_pm_nof = list(session.execute(cql_pm_nof))
+        data = dict()
+
+        for record in records_ozone:
+            time = record.time.strftime('%Y-%m-%d %H:%M')
+            if not data.get(time):
+                data[time] = dict()
+            data[time][44201] = record.c
+
+        for record in records_pm:
+            time = record.time.strftime('%Y-%m-%d %H:%M')
+            if not data.get(time):
+                data[time] = dict()
+            data[time][88101] = record.c
+
+        for record in records_pm_nof:
+            time = record.time.strftime('%Y-%m-%d %H:%M')
+            if not data.get(time):
+                data[time] = dict()
+            data[time][88502] = record.c
+
+        data_sorted = OrderedDict(sorted(data.items(), key=lambda t: t[0]))
+
+        # f = csv.writer(open("data.csv", "w"))
+        #file_tmp = NamedTemporaryFile(delete=False)
+        yield ",".join(["timestamp", "ozone", "pm2.5_frm", "pm2.5_nfrm"]) + '\n'
+        for key, values in data_sorted.items():
+            yield ",".join([key, str(values.get(44201, '')), str(values.get(88101, '')), str(values.get(88502, ''))]) + '\n'
+
+    if request.method == 'GET':
+        return redirect('/')
+
+    elif request.method == 'POST':
+        grid_id = request.form['grid_id']
+        return Response(stream_with_context(make_csv(grid_id)), mimetype='text/csv',
+        headers={"Content-Disposition": "attachment; filename=data_grid_{}.csv".format(grid_id)})
+        # return send_file(f_IO, as_attachment=True, attachment_filename='data_grid_{}.csv'.format(grid_id))
+        # return 'records_pm_nof = {}'.format(len(records_ozone), len(records_pm), len(records_pm_nof))
 
 
 @app.route('/test', methods=['GET', 'POST'])
@@ -71,7 +130,7 @@ def hello():
                 ozone_data = [[1000*int(x.time.strftime('%s')), round(1000*x.c,2)] for x in ozone]
 
                 pm = [x for x in history_measurements if x.parameter == 88101]
-                pm_data = [[1000*int(x.time.strftime('%s')), x.c] for x in pm]
+                pm_data = [[1000*int(x.time.strftime('%s')), round(x.c,2)] for x in pm]
 
                 # Setup charts
                 chart_type='line'
@@ -95,7 +154,8 @@ def hello():
                 break
         #return render_template('base.html', chart_ozone=chart_ozone, chart_pm=chart_pm, series_ozone=series_ozone, series_pm=series_pm)
         return render_template('dashboard.html', chart_ozone=chart_ozone, chart_pm=chart_pm, series_ozone=series_ozone, series_pm=series_pm,
-                               lat=latitude, lon=longitude, API_url=API_url)
+                               ozone_current=ozone_data[0][1], pm_current=pm_data[0][1],
+                               lat=latitude, lon=longitude, grid_id=grid_id, API_url=API_url)
 
 
 if __name__ == '__main__':
