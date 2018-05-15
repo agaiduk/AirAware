@@ -5,7 +5,6 @@ from flask import stream_with_context, Response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import text
 from flask_cassandra import CassandraCluster
-import models
 from datetime import datetime
 from collections import OrderedDict
 
@@ -23,44 +22,78 @@ API_url = "https://maps.googleapis.com/maps/api/js?key="\
 
 # Parameter codes for asthma-causing pollutants
 ozone_code = 44201
-pm_frm_code = 88101  # Federal reference method
-pm_code = 88502  # Non-federal reference method
+pm_frm_code = 88101  # Federal reference methods
+pm_code = 88502  # Non-federal reference methods
+
+import models
+
+
+def get_pollutant_records(session, data, grid_id, parameter):
+    '''
+    Add full historical pollution data for pollutant code (parameter)
+    at grid_id to a dictionary data
+    '''
+    cql = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}"
+    cql_command = cql.format(grid_id, parameter)
+    records = list(session.execute(cql_command))
+
+    for record in records:
+        time = record.time.strftime('%Y-%m-%d %H:%M')
+        if not data.get(time):
+            data[time] = dict()
+        data[time][parameter] = record.c
+
+
+def get_pollution_data(grid_id):
+    # Connect to Cassandra database and obtain pollution data
+    session = cassandra.connect()
+    session.set_keyspace("air")
+
+    data = dict()
+    get_pollutant_records(session, data, grid_id, ozone_code)
+    get_pollutant_records(session, data, grid_id, pm_frm_code)
+    get_pollutant_records(session, data, grid_id, pm_code)
+
+    return OrderedDict(sorted(data.items(), key=lambda t: t[0]))
+
+
+def process_csv_record(record):
+    '''
+    Given record containing pollution data, return streamlined record
+    '''
+    ozone = record.get(ozone_code, None)
+    pm_frm = record.get(pm_frm_code, None)
+    pm = record.get(pm_code, None)
+
+    # Compute PM2.5 pollution level based on measurements available
+    # If we have a zero, report pollution level as 0, not None
+    n_pm = 0  # Counter of valid pm measurements
+    pm_average = 0.
+    if pm_frm is not None:
+        n_pm += 1
+        pm_average += pm_frm
+    if pm is not None:
+        n_pm += 1
+        pm_average += pm
+
+    if n_pm:
+        pm_average /= n_pm
+    else:
+        pm_average = None
+
+    return ['{:.2f}'.format(1000*ozone) if ozone is not None else '', '{:.2f}'.format(pm_average) if pm_average is not None else '']
 
 
 def make_csv(grid_id):
-    session = cassandra.connect()
-    session.set_keyspace("air")
-    cql_ozone = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, ozone_code)
-    cql_pm = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, pm_frm_code)
-    cql_pm_nof = "SELECT * FROM air.measurements_hourly WHERE grid_id = {} AND parameter = {}".format(grid_id, pm_code)
-    records_ozone = list(session.execute(cql_ozone))
-    records_pm = list(session.execute(cql_pm))
-    records_pm_nof = list(session.execute(cql_pm_nof))
-    data = dict()
+    '''
+    This function makes csv file with the full air pollution history for a given grid point
+    '''
+    # OrderedDict assembled from Cassandra
+    data = get_pollution_data(grid_id)
 
-    for record in records_ozone:
-        time = record.time.strftime('%Y-%m-%d %H:%M')
-        if not data.get(time):
-            data[time] = dict()
-        data[time][ozone_code] = record.c
-
-    for record in records_pm:
-        time = record.time.strftime('%Y-%m-%d %H:%M')
-        if not data.get(time):
-            data[time] = dict()
-        data[time][pm_frm_code] = record.c
-
-    for record in records_pm_nof:
-        time = record.time.strftime('%Y-%m-%d %H:%M')
-        if not data.get(time):
-            data[time] = dict()
-        data[time][pm_code] = record.c
-
-    data_sorted = OrderedDict(sorted(data.items(), key=lambda t: t[0]))
-
-    yield ",".join(["timestamp", "ozone", "pm2.5_frm", "pm2.5_nfrm"]) + '\n'
-    for key, values in data_sorted.items():
-        yield ",".join([key, str(values.get(ozone_code, '')), str(values.get(pm_frm_code, '')), str(values.get(pm_code, ''))]) + '\n'
+    yield ",".join(["Timestamp", "Ozone [ppb]", "PM2.5 [mcg/m3]"]) + '\n'
+    for timestep, record in data.items():
+        yield ",".join([ item for l in [[timestep], process_csv_record(record)] for item in l]) + '\n'
 
 
 @app.route('/download', methods=['GET', 'POST'])
@@ -100,13 +133,12 @@ def dashboard():
         for i in range(0, len(nearest_grid_points)):
             grid_id = nearest_grid_points[i][1]
             history_measurements = models.measurements_monthly\
-                                   .query.filter_by(grid_id=grid_id)\
-                                   .order_by(models.measurements_monthly\
-                                   .time.asc()).all()
+                .query.filter_by(grid_id=grid_id)\
+                .order_by(models.measurements_monthly.time.asc()).all()
 
             if not history_measurements:
-                # If the grid point we found does not contain any historical data
-                # (for example, it is far from any air control station)
+                # The grid point we found does not contain any historical
+                # data (for example, it is far from any air quality station)
                 continue
 
             else:
@@ -151,6 +183,21 @@ def dashboard():
 
         rendered_webpage = request_from_location(latitude, longitude)
         return rendered_webpage
+
+
+@app.route('/about', methods=['GET'])
+def about():
+    return redirect("https://github.com/agaiduk/AirAware")
+
+
+@app.route('/slides', methods=['GET'])
+def slides():
+    return redirect("https://docs.google.com/presentation/d/1BWLKoafapgM5VxpgU_nHYCeJLk38wu1VACwECdN8RIo")
+
+
+@app.route('/github', methods=['GET'])
+def github():
+    return redirect("https://github.com/agaiduk")
 
 
 if __name__ == '__main__':

@@ -152,7 +152,7 @@
                   '</div>'+
                   '<h4 id="firstHeading" class="firstHeading">Current conditions</h4>'+
                   '<div id="bodyContent">'+
-                  '<p><b>Ozone:</b> ' + {{ ozone_current|safe }} + ' ppm (good)</p>' +
+                  '<p><b>Ozone:</b> ' + {{ ozone_current|safe }} + ' ppb (good)</p>' +
                   '<p><b>PM2.5:</b> ' + {{ pm_current|safe }} + ' &mu;g/m<sup>3</sup> (moderate)</p>' +
                   '</div>'+
                   '</div>';
@@ -188,7 +188,7 @@
           </div>
           <div class="chart" id="ozone"></div>
           <div class="chart-notes">
-            Average monthly content of ozone in atmosphere
+            Average monthly concentration of ozone in atmosphere
           </div>
         </div>
       </div>
@@ -200,7 +200,7 @@
           </div>
           <div class="chart" id="pm"></div>
           <div class="chart-notes">
-            Average monthly content of ozone in atmosphere
+            Average monthly concentration of ozone in atmosphere
           </div>
         </div>
       </div>
@@ -225,16 +225,22 @@
       var series_ozone = {{ series_ozone|safe }}
       var series_pm = {{ series_pm|safe }}
       var title = {"text": ''}
+      var tooltip_ozone = { 'pointFormat': "{series.name}: <b>{point.y:.2f}</b> ppb"}
+      var tooltip_pm = { 'pointFormat': "{series.name}: <b>{point.y:.2f}</b> &mu;g/m<sup>3</sup>", 'useHTML': true}
       var xAxis = {'type': 'datetime', "title": {'text': 'Date'}, 'min': Date.UTC(2010, 0, 0)}
-      var yAxis = {"title": {"text": 'Concentration'}}
+      var yAxis_ozone = {"title": {"text": 'Concentration, ppb'}}
+      var yAxis_pm = {"title": {"text": 'Concentration, &mu;g/m<sup>3</sup>', 'useHTML': true}}
+      var plotOptions = {'series': {'marker': {'enabled': true}}}
 
       $(document).ready(function() {
           $(ozone).highcharts({
               chart: chart_ozone,
               title: title,
               xAxis: xAxis,
-              yAxis: yAxis,
-              series: series_ozone
+              yAxis: yAxis_ozone,
+              series: series_ozone,
+              tooltip: tooltip_ozone,
+              plotOptions: plotOptions
           });
       });
 
@@ -243,8 +249,10 @@
               chart: chart_pm,
               title: title,
               xAxis: xAxis,
-              yAxis: yAxis,
-              series: series_pm
+              yAxis: yAxis_pm,
+              series: series_pm,
+              tooltip: tooltip_pm,
+              plotOptions: plotOptions
           });
       });
   </script>
