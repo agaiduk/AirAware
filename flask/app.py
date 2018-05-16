@@ -25,6 +25,11 @@ ozone_code = 44201
 pm_frm_code = 88101  # Federal reference methods
 pm_code = 88502  # Non-federal reference methods
 
+# SF coordinates as a default
+sf = dict()
+sf['lat'] = 41.8781136
+sf['lon'] = -87.6297982
+
 import models
 
 
@@ -57,7 +62,7 @@ def get_pollution_data(grid_id):
     return OrderedDict(sorted(data.items(), key=lambda t: t[0]))
 
 
-def process_csv_record(record):
+def get_ozone_and_pm(record):
     '''
     Given record containing pollution data, return streamlined record
     '''
@@ -81,7 +86,8 @@ def process_csv_record(record):
     else:
         pm_average = None
 
-    return ['{:.2f}'.format(1000*ozone) if ozone is not None else '', '{:.2f}'.format(pm_average) if pm_average is not None else '']
+    return ['{:.2f}'.format(1000*ozone) if ozone is not None else '',
+            '{:.2f}'.format(pm_average) if pm_average is not None else '']
 
 
 def make_csv(grid_id):
@@ -93,7 +99,46 @@ def make_csv(grid_id):
 
     yield ",".join(["Timestamp", "Ozone [ppb]", "PM2.5 [mcg/m3]"]) + '\n'
     for timestep, record in data.items():
-        yield ",".join([ item for l in [[timestep], process_csv_record(record)] for item in l]) + '\n'
+        yield ","\
+            .join([item for sublist in [[timestep], get_ozone_and_pm(record)]
+                  for item in sublist]) + '\n'
+
+
+def get_coordinates_from_address(address_request):
+    '''
+    This function converts address to coordinates using Google Maps API call
+    '''
+    geocode_result = gmaps.geocode(address_request)
+
+    # Some defaults
+    error_message = 'Please enter a valid U.S. address'
+    formatted_address = None
+    coordinates = None
+    latitude, longitude = None, None
+
+    if len(geocode_result) == 0:
+        return sf['lat'], sf['lon'], error_message
+
+    address = geocode_result[0]
+    # Check if the address is in the U.S.
+    try:
+        formatted_address = address['formatted_address'].lower()
+    except (TypeError, KeyError):
+        return sf['lat'], sf['lon'], error_message
+
+    if 'usa' in formatted_address or 'puerto rico' in formatted_address:
+        try:
+            coordinates = address["geometry"]["location"]
+        except (TypeError, KeyError):
+            return sf['lat'], sf['lon'], error_message
+
+    if coordinates:
+        latitude = coordinates["lat"]
+        longitude = coordinates["lng"]
+    else:
+        return sf['lat'], sf['lon'], error_message
+
+    return latitude, longitude, ''
 
 
 @app.route('/download', methods=['GET', 'POST'])
@@ -114,10 +159,24 @@ def download():
         )
 
 
+def pollution_level(c, moderate, bad):
+    '''
+    Determine pollution level based on thresholds
+    '''
+    if c < moderate:
+        result = 'good'
+    elif c > moderate and c < bad:
+        result = 'moderate'
+    elif c > bad:
+        result = 'bad'
+
+    return result
+
+
 @app.route('/', methods=['GET', 'POST'])
 def dashboard():
 
-    def request_from_location(latitude, longitude):
+    def request_from_location(latitude, longitude, error_message=''):
         '''
         This function prepares Http request object,
         based on user's location input
@@ -148,6 +207,19 @@ def dashboard():
                 pm = [x for x in history_measurements if x.parameter == pm_frm_code]
                 pm_data = [[1000*int(x.time.strftime('%s')), round(x.c,2)] for x in pm]
 
+                if len(ozone_data) == 0 or len(pm_data) == 0:
+                    rendered_webpage = request_from_location(
+                            sf['lat'],
+                            sf['lon'],
+                            'Location you entered is too far from air quality monitors'
+                        )
+                    return rendered_webpage
+
+                ozone_current = ozone_data[-1][1]
+                pm_current = pm_data[-1][1]
+                ozone_level = pollution_level(ozone_current, 30, 50)
+                pm_level = pollution_level(pm_current, 12, 30)
+
                 # Setup charts
                 chart_type = 'line'
                 chart_height = 350
@@ -161,27 +233,28 @@ def dashboard():
             'dashboard.html', chart_ozone=chart_ozone, chart_pm=chart_pm,
             series_ozone=series_ozone, series_pm=series_pm,
             ozone_current=ozone_data[-1][1], pm_current=pm_data[-1][1],
-            lat=latitude, lon=longitude, grid_id=grid_id, API_url=API_url
+            ozone_level=ozone_level, pm_level=pm_level,
+            lat=latitude, lon=longitude, grid_id=grid_id, API_url=API_url,
+            error_message=error_message
         )
 
     if request.method == 'GET':
         # Default coordinates in San Francisco downtown
-        rendered_webpage = request_from_location(37.7749295, -122.4194155)
+        rendered_webpage = request_from_location(sf['lat'], sf['lon'])
         return rendered_webpage
 
     elif request.method == 'POST':
 
         # Get address entered by the user
-        address = request.form['address']
+        address_request = request.form['address']
 
         # Obtain geolocation results from Google Maps
-        geocode_result = gmaps.geocode(address)
-        coordinates = geocode_result[0]["geometry"]["location"]
+        latitude, longitude, error_message =\
+            get_coordinates_from_address(address_request)
 
-        latitude = coordinates["lat"]
-        longitude = coordinates["lng"]
+        rendered_webpage =\
+            request_from_location(latitude, longitude, error_message=error_message)
 
-        rendered_webpage = request_from_location(latitude, longitude)
         return rendered_webpage
 
 

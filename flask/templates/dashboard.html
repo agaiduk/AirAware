@@ -40,7 +40,7 @@
       position: absolute;
       top: 22px; left: 0;
       opacity: 0;
-      width: 300px;
+      width: 310px;
       font-size: 13px;
       font-weight: 400;
       line-height: 1.5em;
@@ -121,14 +121,18 @@
       <div class="col-sm-8 col-sm-offset-2">
         <form role="form" action="/" method="post">
                 <div class="input-group">
-                  <input type="text" class="form-control input-sm" name="address" placeholder="Enter address...">
+                  <input type="text" class="form-control input-sm" name="address" placeholder="Enter a U.S. address...">
                   <span class="input-group-btn">
                     <button class="btn btn-default btn-sm" type="submit" value="Submit"><span class="glyphicon glyphicon-search"></span></button>
                   </span>
                 </div>
         </form>
       </div>
-    </div> <br><br>
+    </div>
+        {% if error_message != None %}
+            <br><center>{{ error_message }}</center>
+        {% endif %}
+ <br><br>
 
     <div class="row">
 
@@ -152,8 +156,8 @@
                   '</div>'+
                   '<h4 id="firstHeading" class="firstHeading">Current conditions</h4>'+
                   '<div id="bodyContent">'+
-                  '<p><b>Ozone:</b> ' + {{ ozone_current|safe }} + ' ppb (good)</p>' +
-                  '<p><b>PM2.5:</b> ' + {{ pm_current|safe }} + ' &mu;g/m<sup>3</sup> (moderate)</p>' +
+                  '<p><b>Ozone:</b> ' + {{ ozone_current|safe }} + ' ppb ({{ ozone_level|safe }})</p>' +
+                  '<p><b>PM2.5:</b> ' + {{ pm_current|safe }} + ' &mu;g/m<sup>3</sup> ({{ pm_level|safe }})</p>' +
                   '</div>'+
                   '</div>';
 
@@ -196,11 +200,11 @@
       <div class="col-sm-6">
         <div class="chart-wrapper">
           <div class="chart-title">
-            <dfn data-info="Hard particles with size of less than 2.5 &mu;m; one of the most harmful components of smog">PM2.5 particles</dfn> air pollution
+            <dfn data-info="Hard particles with size netween 2.5 and 10 &mu;m; one of the most harmful components of smog">PM2.5 particles</dfn> air pollution
           </div>
           <div class="chart" id="pm"></div>
           <div class="chart-notes">
-            Average monthly concentration of ozone in atmosphere
+            Average monthly concentration of hard particles (between 2.5 and 10 &mu;m) in atmosphere
           </div>
         </div>
       </div>
