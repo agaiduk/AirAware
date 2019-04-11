@@ -2,7 +2,7 @@
 
 The goal of my Insight Data Engineering project was to develop a data pipeline and Web platform for monitoring air quality at arbitrary United States locations. My data application could be used by analytics teams to understand the effect of pollution on health, with the specific focus on asthma and preventing its attacks.
 
-Screencast: https://youtu.be/82MFrfjmKKA
+Screencast: https://youtu.be/MRiDzQR7k7w
 
 ## Table of contents
 1. [Introduction](README.md#introduction)
